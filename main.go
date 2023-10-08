@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -27,6 +29,7 @@ func main() {
 	apiRouter := chi.NewRouter()
 	apiRouter.Get("/healthz", HandleHealthPath)
 	apiRouter.Get("/reset", cfg.HandleReset)
+	apiRouter.Post("/validate_chirp", HandleValidateChirp)
 	mainRouter.Mount("/api", apiRouter)
 
 	adminRouter := chi.NewRouter()
@@ -42,6 +45,73 @@ func main() {
 	log.Printf("Serving on port: %s\n", PORT)
 	log.Fatal(err)
 }
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	dat, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	fmt.Println(string(dat))
+	w.WriteHeader(code)
+	w.Write(dat)
+}
+
+func HandleValidateChirp(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
+	type BodyDto struct {
+		Body string
+	}
+	// kerfuffle sharbert fornax
+	var bodyDto BodyDto
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&bodyDto)
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		SendError(w, 500, "Something went wrong")
+		return
+	}
+	if len(bodyDto.Body) == 0 {
+		SendError(w, 400, "No empty body bitte!")
+		return
+	}
+	if len(bodyDto.Body) > 140 {
+		SendError(w, 400, "Chirp is too long")
+		return
+	}
+	notPermitted := []string{"kerfuffle", "sharbert", "fornax"}
+	splited := strings.Split(bodyDto.Body, " ")
+	for index, verb := range splited {
+		for _, v := range notPermitted {
+			if strings.ToLower(verb) == v {
+				splited[index] = "****"
+			}
+		}
+	}
+	type Valide struct {
+		Valid string `json:"cleaned_body"`
+	}
+	respondWithJSON(w, 200, Valide{Valid: strings.Join(splited, " ")})
+}
+
+func SendError(w http.ResponseWriter, code int, message string) {
+	type Error struct {
+		error string
+	}
+	w.WriteHeader(code)
+	if len(message) == 0 {
+		message = "Something went wrong"
+	}
+	response, err := json.Marshal(Error{error: message})
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		return
+	}
+	w.Write(response)
+}
+
 func HandleHealthPath(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(200)
