@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 
@@ -16,8 +17,10 @@ type apiConfig struct {
 func main() {
 	const filepathRoot = "."
 	const port = "8080"
+	dbg := flag.Bool("debug", false, "Enable debug mode")
+	flag.Parse()
 
-	db, err := database.NewDB("database.json")
+	db, err := database.NewDB("database.json", *dbg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,6 +41,8 @@ func main() {
 	apiRouter.Post("/chirps", apiCfg.handlerChirpsCreate)
 	apiRouter.Get("/chirps", apiCfg.handlerChirpsRetrieve)
 	apiRouter.Get("/chirps/{chirpID}", apiCfg.handlerChirpsGet)
+	apiRouter.Post("/users", apiCfg.handleUsersCreate)
+	apiRouter.Post("/login", apiCfg.handleLogin)
 	router.Mount("/api", apiRouter)
 
 	adminRouter := chi.NewRouter()

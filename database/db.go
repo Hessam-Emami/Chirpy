@@ -14,6 +14,13 @@ type DB struct {
 
 type DBStructure struct {
 	Chirps map[int]Chirp `json:"chirps"`
+	Users  map[int]User  `json:"users"`
+}
+
+type User struct {
+	ID       int    `json:"id"`
+	Email    string `json:"email"`
+	Password string `json:password"`
 }
 
 type Chirp struct {
@@ -21,10 +28,16 @@ type Chirp struct {
 	Body string `json:"body"`
 }
 
-func NewDB(path string) (*DB, error) {
+func NewDB(path string, isDebug bool) (*DB, error) {
 	db := &DB{
 		path: path,
 		mu:   &sync.RWMutex{},
+	}
+	if isDebug {
+		err := os.Remove(db.path)
+		if err != nil {
+			return nil, err
+		}
 	}
 	err := db.ensureDB()
 	return db, err
@@ -65,9 +78,46 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 	return chirps, nil
 }
 
+func (db *DB) CreateUser(email string, password string) (User, error) {
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
+
+	id := len(dbStructure.Users) + 1
+	user := User{
+		ID:       id,
+		Email:    email,
+		Password: password,
+	}
+	dbStructure.Users[id] = user
+
+	err = db.writeDB(dbStructure)
+	if err != nil {
+		return User{}, err
+	}
+
+	return user, nil
+}
+
+func (db *DB) GetUsers() ([]User, error) {
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]User, 0, len(dbStructure.Users))
+	for _, user := range dbStructure.Users {
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
 func (db *DB) createDB() error {
 	dbStructure := DBStructure{
 		Chirps: map[int]Chirp{},
+		Users:  map[int]User{},
 	}
 	return db.writeDB(dbStructure)
 }
