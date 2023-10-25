@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/Hessam-Emami/Chirpy/database"
 	"golang.org/x/crypto/bcrypt"
 )
 
 func (cfg *apiConfig) handleUsersCreate(w http.ResponseWriter, r *http.Request) {
+	type User struct {
+		Email string `json:"email"`
+		ID    int    `json:"id"`
+	}
 	type parameters struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -30,16 +33,20 @@ func (cfg *apiConfig) handleUsersCreate(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusBadRequest, "Must send a password!")
 		return
 	}
-
-	user, err := cfg.DB.CreateUser(params.Email, bcrypt.GenerateFromPassword(params.Password))
+	pass, err := bcrypt.GenerateFromPassword([]byte(params.Password), 1)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create user")
+		return
+	}
+	user, err := cfg.DB.CreateUser(params.Email, string(pass))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create user")
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, database.User{
-		ID:    user.ID,
+	respondWithJSON(w, http.StatusCreated, User{
 		Email: user.Email,
+		ID:    user.ID,
 	})
 
 }

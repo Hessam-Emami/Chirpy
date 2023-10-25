@@ -20,7 +20,7 @@ type DBStructure struct {
 type User struct {
 	ID       int    `json:"id"`
 	Email    string `json:"email"`
-	Password string `json:password"`
+	Password string `json:"password"`
 }
 
 type Chirp struct {
@@ -105,12 +105,10 @@ func (db *DB) GetUsers() ([]User, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	users := make([]User, 0, len(dbStructure.Users))
 	for _, user := range dbStructure.Users {
 		users = append(users, user)
 	}
-
 	return users, nil
 }
 

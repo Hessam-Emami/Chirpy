@@ -2,14 +2,22 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/Hessam-Emami/Chirpy/database"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
-	type parameters struct {
+	type User struct {
+		ID    int    `json:"id"`
 		Email string `json:"email"`
+	}
+
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -25,13 +33,32 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := cfg.DB.CreateUser(params.Email)
+	if len(params.Password) == 0 {
+		respondWithError(w, http.StatusBadRequest, "Must send an password!")
+		return
+	}
+	users, err := cfg.DB.GetUsers()
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't create user")
+		respondWithError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, database.User{
+	user := database.User{}
+	for _, v := range users {
+		if v.Email == params.Email {
+			user = v
+		}
+	}
+	log.Printf("Couldn't find")
+	if len(user.Email) == 0 {
+		respondWithError(w, http.StatusNotFound, "Email doesn't match")
+		return
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password))
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Password or email doesn't match")
+	}
+	respondWithJSON(w, http.StatusOK, User{
 		ID:    user.ID,
 		Email: user.Email,
 	})
