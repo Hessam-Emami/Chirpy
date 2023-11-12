@@ -2,22 +2,21 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+	"time"
 
-	"github.com/Hessam-Emami/Chirpy/database"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/Hessam-Emami/Chirpy/internal/auth"
 )
 
-func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
-	type User struct {
-		ID    int    `json:"id"`
-		Email string `json:"email"`
-	}
-
+func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Password         string `json:"password"`
+		Email            string `json:"email"`
+		ExpiresInSeconds int    `json:"expires_in_seconds"`
+	}
+	type response struct {
+		User
+		Token string `json:"token"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -28,39 +27,36 @@ func (cfg *apiConfig) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(params.Email) == 0 {
-		respondWithError(w, http.StatusBadRequest, "Must send an email!")
+	user, err := cfg.DB.GetUserByEmail(params.Email)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't get user")
 		return
 	}
 
-	if len(params.Password) == 0 {
-		respondWithError(w, http.StatusBadRequest, "Must send an password!")
-		return
-	}
-	users, err := cfg.DB.GetUsers()
+	err = auth.CheckPasswordHash(params.Password, user.HashedPassword)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "internal error")
+		respondWithError(w, http.StatusUnauthorized, "Invalid password")
 		return
 	}
 
-	user := database.User{}
-	for _, v := range users {
-		if v.Email == params.Email {
-			user = v
-		}
+	defaultExpiration := 60 * 60 * 24
+	if params.ExpiresInSeconds == 0 {
+		params.ExpiresInSeconds = defaultExpiration
+	} else if params.ExpiresInSeconds > defaultExpiration {
+		params.ExpiresInSeconds = defaultExpiration
 	}
-	log.Printf("Couldn't find")
-	if len(user.Email) == 0 {
-		respondWithError(w, http.StatusNotFound, "Email doesn't match")
+
+	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret, time.Duration(params.ExpiresInSeconds)*time.Second)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create JWT")
 		return
 	}
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password))
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Password or email doesn't match")
-	}
-	respondWithJSON(w, http.StatusOK, User{
-		ID:    user.ID,
-		Email: user.Email,
+
+	respondWithJSON(w, http.StatusOK, response{
+		User: User{
+			ID:    user.ID,
+			Email: user.Email,
+		},
+		Token: token,
 	})
-
 }
